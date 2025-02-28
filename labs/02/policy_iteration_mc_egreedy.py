@@ -69,6 +69,7 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
 
     # Start with zero action-value function and "go North" policy
     action_value_function = np.zeros((env.states, env.actions))
+    counts = np.zeros((env.states, env.actions))
     policy = np.zeros(env.states, np.int32)
 
     # Note that this assignment is an extension of policy_iteration_mc_estarts,
@@ -94,12 +95,51 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # After completing the policy_evaluation step (i.e., after updating estimates
     # in all states), perform the policy improvement, using the
     # `argmax_with_tolerance` to choose the best action.
+    for _ in range(args.steps):
+
+        # policy evaluation
+        action_value_function, counts = estimate_av(env, args, action_value_function, counts, policy)
+
+        # policy improvement
+        policy = policy_improvement(action_value_function, policy)
 
     # TODO: Compute `value_function` by taking the value from
     # `action_value_function` according to the computed policy.
-    value_function = None
+    value_function = [0] * GridWorld.states
+    for s_id in range(GridWorld.states):
+        value_function[s_id] = action_value_function[s_id, policy[s_id]]
 
     return value_function, policy
+
+
+def estimate_av(env, args, action_value_function, counts, policy):
+    for start_state in range(env.states):
+        episode = []
+        start_action = None
+        # perform mc_length steps
+        curr_state = start_state
+        for _ in range(args.mc_length):
+            action =  env.epsilon_greedy(args.epsilon, policy[curr_state])
+            rew, curr_state = env.step(curr_state, action)
+            episode.append((rew, curr_state))
+            if start_action is None: start_action = action
+        
+        # compute return of whole simulation
+        G = 0
+        for reward, _ in reversed(episode):
+            G = reward + args.gamma * G
+        
+        # update av function
+        counts[start_state, start_action] += 1
+        action_value_function[start_state, start_action] += (G - action_value_function[start_state, start_action]) / counts[start_state, start_action]
+
+    return action_value_function, counts
+
+
+def policy_improvement(action_value_function, policy):
+    for s_id in range(GridWorld.states):
+        policy[s_id] = np.argmax(action_value_function[s_id])
+    return policy
 
 
 if __name__ == "__main__":

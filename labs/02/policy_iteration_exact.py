@@ -61,9 +61,48 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # Note that you need to use 64-bit floats because lower precision results
     # in unacceptable error. During the policy improvement, use the
     # `argmax_with_tolerance` to choose the best action.
+    for _ in range(args.steps):
+
+        # policy evaluation
+        value_function = policy_evaluation(args, value_function, policy)
+
+        # policy improvement
+        policy, _ = policy_improvement(args, value_function, policy)
 
     # TODO: The final value function should be in `value_function` and final greedy policy in `policy`.
     return value_function, policy
+
+
+def policy_evaluation(args, value_function, policy):
+    A = np.eye(GridWorld.states, dtype=np.float64)
+    b = np.zeros(GridWorld.states, dtype=np.float64)
+
+    for s_id in range(GridWorld.states):
+        a_id = policy[s_id]
+        outcome = GridWorld.step(s_id, a_id)
+        for o_id in range(len(outcome)):
+            prob, rew, next_state = outcome[o_id]
+            A[s_id, next_state] -= args.gamma * prob
+            b[s_id] += prob * rew
+
+    value_function = np.linalg.solve(A, b)
+    return value_function
+
+
+def policy_improvement(args, value_function, policy):
+    stab_flag = True
+    for s_id in range(GridWorld.states):
+        old_a_id = policy[s_id]
+        a_vals = [0] * GridWorld.actions
+        for a_id in range(GridWorld.actions):
+            outcome = GridWorld.step(s_id, a_id)
+            for o_id in range(len(outcome)):
+                prob, rew, next_state = outcome[o_id]
+                a_vals[a_id] += prob * (rew + args.gamma * value_function[next_state])
+        policy[s_id] = argmax_with_tolerance(a_vals)
+        if old_a_id != policy[s_id]: stab_flag = False
+
+    return policy, stab_flag
 
 
 if __name__ == "__main__":

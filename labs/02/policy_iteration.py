@@ -62,9 +62,46 @@ def main(args: argparse.Namespace) -> tuple[list[float] | np.ndarray, list[int] 
     # Bellman equation. Perform the policy evaluation asynchronously (i.e., update
     # the value function in-place for states 0, 1, ...). During the policy
     # improvement, use the `argmax_with_tolerance` to choose the best action.
+    for _ in range(args.steps):
+
+        # policy evaluation
+        value_function = policy_evaluation(args, value_function, policy)
+
+        # policy improvement
+        policy, _ = policy_improvement(args, value_function, policy)
 
     # TODO: The final value function should be in `value_function` and final greedy policy in `policy`.
     return value_function, policy
+
+
+def policy_evaluation(args, value_function, policy):
+    for _ in range(args.iterations):
+        for s_id in range(GridWorld.states):
+            new_val = 0
+            a_id = policy[s_id]
+            outcome = GridWorld.step(s_id, a_id)
+            for o_id in range(len(outcome)):
+                prob, rew, next_state = outcome[o_id]
+                new_val += prob * (rew + args.gamma * value_function[next_state])
+            value_function[s_id] = new_val
+
+    return value_function
+
+
+def policy_improvement(args, value_function, policy):
+    stab_flag = True
+    for s_id in range(GridWorld.states):
+        old_a_id = policy[s_id]
+        a_vals = [0] * GridWorld.actions
+        for a_id in range(GridWorld.actions):
+            outcome = GridWorld.step(s_id, a_id)
+            for o_id in range(len(outcome)):
+                prob, rew, next_state = outcome[o_id]
+                a_vals[a_id] += prob * (rew + args.gamma * value_function[next_state])
+        policy[s_id] = argmax_with_tolerance(a_vals)
+        if old_a_id != policy[s_id]: stab_flag = False
+
+    return policy, stab_flag
 
 
 if __name__ == "__main__":
